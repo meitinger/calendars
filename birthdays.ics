@@ -1,0 +1,199 @@
+﻿<%@ Page Language="C#" Debug="true" ContentType="text/calendar" %>
+<script runat="server" type="text/C#">
+  /* Copyright (C) 2019, Manuel Meitinger
+   * 
+   * This program is free software: you can redistribute it and/or modify
+   * it under the terms of the GNU General Public License as published by
+   * the Free Software Foundation, either version 2 of the License, or
+   * (at your option) any later version.
+   * 
+   * This program is distributed in the hope that it will be useful,
+   * but WITHOUT ANY WARRANTY; without even the implied warranty of
+   * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   * GNU General Public License for more details.
+   * 
+   * You should have received a copy of the GNU General Public License
+   * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   */
+
+  static readonly Dictionary<string,int> GroupMappings = new Dictionary<string,int>()
+  {
+    {"000910", 0xFFF},
+    {"010400", 0x001},
+    {"020400", 0x002},
+    {"030400", 0x004},
+    {"040400", 0x008},
+    {"050400", 0x010},
+    {"070400", 0x020},
+    {"080100", 0x040},
+    {"080200", 0x080},
+    {"000999", 0x100},
+  };
+
+  protected override void OnLoad(EventArgs e)
+  {
+    base.OnLoad(e);
+    cpulohn.Selecting += cpulohn_Selecting;
+    vivendi.Selecting += vivendi_Selecting;
+  }
+
+  void cpulohn_Selecting(object sender, SqlDataSourceSelectingEventArgs e)
+  {
+    e.Command.Parameters["@GRUPPE"].Value = GroupMappings.Aggregate(0, (mask, entry) => HttpContext.Current.User.IsInRole(@"AUFBAUWERK\"+entry.Key) ? (mask | entry.Value) : mask);
+  }
+
+  void vivendi_Selecting(object sender, SqlDataSourceSelectingEventArgs e)
+  {
+    var userName = HttpContext.Current.User.Identity.Name;
+    e.Command.Parameters["@USERNAME"].Value = userName.Substring(userName.IndexOf('\\') + 1);
+  }
+
+  string Escape(object s)
+  {
+    return Regex.Replace(Regex.Replace(s.ToString(), @"([\\;,])", @"\$1"), @"\r?\n", @"\n");
+  }
+</script>
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:Manuel's uber-awesome cpulohn and Vivendi Bday-Bridge
+METHOD:PUBLISH
+X-WR-RELCALID:{A3EE805B-C0E3-4760-A66F-529079CCCD97}
+X-WR-CALNAME:Geburtstage
+X-PUBLISHED-TTL:PT1D
+<asp:SqlDataSource
+  ID="vivendi"
+  runat="server"
+  ConnectionString="<%$ConnectionStrings:vivendi%>"
+  ProviderName="<%$ConnectionStrings:vivendi.ProviderName%>"
+  SelectCommand=
+"
+WITH PA(ID, Parent) AS
+(
+  SELECT Z_MA, Z_Parent_MA
+  FROM MANDANT
+  UNION ALL
+  SELECT MA.Z_MA, PA.Parent
+  FROM MANDANT AS MA JOIN PA ON MA.Z_Parent_MA = PA.ID
+)
+SELECT
+  PE.Z_PE AS [UID],
+  PE.Name + ' ' + PE.Vorname AS [SUMMARY],
+  STRING_AGG(MA.Bezeichnung, ', ') AS [LOCATION],
+  PE.Geburtsdatum AS [DATE]
+FROM
+  BENUTZER AS BN,
+  GRUPPENZUORDNUNG AS GZ,
+  BERECHTIGUNGEN AS BE,
+  MANDANTENZUORDNUNG AS MZ,
+  MANDANT AS MA,
+  PFLEGEBED AS PF,
+  PERSONEN AS PE
+WHERE
+  BN.Benutzer = @USERNAME                                       -- match the samAccountName
+  AND BN.Inaktiv = 0                                            -- ensure the user is active
+  AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= GETDATE())         -- ensure the user is already valid
+  AND (BN.BisDatum IS NULL OR BN.BisDatum >= GETDATE())         -- ensure the user is still valid
+  AND GZ.iBenutzer = BN.Z_BN                                    -- query assigned roles
+  AND GZ.iGruppe = BE.iGruppe                                   -- query the permissions of those roles
+  AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= GETDATE()) -- ensure the role assignment is already in effect
+  AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= GETDATE()) -- ensure the role assignment is still in effect
+  AND BE.Vorgang = 80                                           -- check the 'Klientendaten' procedure
+  AND BE.Auflisten = 1                                          -- ensure read permission
+  AND                                                           -- check that the client is assigned to the granted department
+  (
+    GZ.iMandant IS NULL
+    OR GZ.iMandant = MZ.iMandant
+    OR GZ.iMandant IN (SELECT PA.Parent FROM PA WHERE PA.ID = MZ.iMandant)
+  )
+  AND (MZ.AbDatum IS NULL OR MZ.AbDatum <= GETDATE())           -- ensure the assigment is already valid
+  AND (MZ.BisDatum IS NULL OR MZ.BisDatum >= GETDATE())         -- ensure the assignment is still valid
+  AND MZ.iMandant = MA.Z_MA                                     -- query the assigned department data
+  AND MZ.iPflegebed = PF.Z_PF                                   -- query the assigned client meta data
+  AND PF.iName = PE.Z_PE                                        -- query the person data of the client
+GROUP BY
+  PE.Z_PE, PE.Vorname, PE.Name, PE.Geburtsdatum
+"
+>
+  <SelectParameters>
+    <asp:Parameter Name="USERNAME" Type="String" />
+  </SelectParameters>
+</asp:SqlDataSource>
+<asp:Repeater runat="server" DataSourceID="vivendi">
+<ItemTemplate>
+BEGIN:VEVENT
+UID:VIVENDI<%#Eval("UID")%>
+DTSTAMP:<%#DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'")%>
+SUMMARY:<%#Escape(Eval("SUMMARY"))%>
+LOCATION:<%#Escape(Eval("LOCATION"))%>
+CATEGORIES:Teilnehmer_in
+CLASS:PUBLIC
+DTSTART;VALUE=DATE:<%#((DateTime)Eval("DATE")).ToString("yyyyMMdd")%>
+DURATION:P1D
+RRULE:FREQ=YEARLY;<%#Eval("DATE","BYMONTHDAY{0:=d};BYMONTH{0:=M}")%>
+TRANSP:TRANSPARENT
+END:VEVENT
+</ItemTemplate>
+</asp:Repeater>
+<asp:SqlDataSource
+  ID="cpulohn"
+  runat="server"
+  ConnectionString="<%$ConnectionStrings:cpulohn%>"
+  ProviderName="<%$ConnectionStrings:cpulohn.ProviderName%>"
+  SelectCommand=
+"
+SELECT
+  P.LPSEQ AS [UID],
+  dbo.MacRoman2Unicode(P.LPNAMVORN) AS [SUMMARY],
+  dbo.MacRoman2Unicode(P.LPDIORT) AS [LOCATION],
+  dbo.MacRoman2Unicode(P.LPBERUF) AS [DESCRIPTION],
+  P.LPGEBDAT AS [DATE],
+  P.LPSTKOST AS [ROLE]
+FROM
+  dbo.LGPER AS P
+WHERE
+  P.LPKLIENT = 1 AND
+  P.LPEINDAT IS NOT NULL AND
+  (
+    P.LPAUSDAT IS NULL OR
+    P.LPAUSDAT >= GETDATE() OR
+    (
+      SELECT IO.LPGRUND
+      FROM dbo.LGPEINAUS AS IO
+      WHERE IO.LPEINPERSEQ = P.LPSEQ AND IO.LPAUSDAT = P.LPAUSDAT
+    ) IN (7,8,9,10,11,12,15,23,29,100,200,250)
+  ) AND
+  (
+    (@GRUPPE & 0x001 <> 0 AND P.LPSTKOST LIKE '010[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x002 <> 0 AND P.LPSTKOST LIKE '020[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x004 <> 0 AND P.LPSTKOST LIKE '030[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x008 <> 0 AND P.LPSTKOST LIKE '0[46]0[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x010 <> 0 AND P.LPSTKOST LIKE '050[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x020 <> 0 AND P.LPSTKOST LIKE '070[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x040 <> 0 AND P.LPSTKOST = '080100') OR
+    (@GRUPPE & 0x080 <> 0 AND P.LPSTKOST = '080200') OR
+    (@GRUPPE & 0x100 <> 0 AND P.LPSTKOST LIKE '[0-9][0-9][0-9]9[0-9][0-9]')
+  )
+"
+>
+  <SelectParameters>
+    <asp:Parameter Name="GRUPPE" Type="Int32" />
+  </SelectParameters>
+</asp:SqlDataSource>
+<asp:Repeater runat="server" DataSourceID="cpulohn">
+<ItemTemplate>
+BEGIN:VEVENT
+UID:CPULOHN<%#Eval("UID")%>
+DTSTAMP:<%#DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'")%>
+SUMMARY:<%#Escape(Eval("SUMMARY"))%>
+LOCATION:<%#Escape(Eval("LOCATION"))%>
+DESCRIPTION:<%#Escape(Eval("DESCRIPTION"))%>
+CATEGORIES:Mitarbeiter_in
+CLASS:PUBLIC
+DTSTART;VALUE=DATE:<%#((DateTime)Eval("DATE")).ToString("yyyyMMdd")%>
+DURATION:P1D
+RRULE:FREQ=YEARLY;<%#Eval("DATE","BYMONTHDAY{0:=d};BYMONTH{0:=M}")%>
+TRANSP:TRANSPARENT
+END:VEVENT
+</ItemTemplate>
+</asp:Repeater>
+END:VCALENDAR

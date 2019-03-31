@@ -1,0 +1,260 @@
+﻿<%@ Page Language="C#" Debug="true" ContentType="text/calendar" %>
+<script runat="server" type="text/C#">
+  /* Copyright (C) 2019, Manuel Meitinger
+   * 
+   * This program is free software: you can redistribute it and/or modify
+   * it under the terms of the GNU General Public License as published by
+   * the Free Software Foundation, either version 2 of the License, or
+   * (at your option) any later version.
+   * 
+   * This program is distributed in the hope that it will be useful,
+   * but WITHOUT ANY WARRANTY; without even the implied warranty of
+   * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   * GNU General Public License for more details.
+   * 
+   * You should have received a copy of the GNU General Public License
+   * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   */
+
+  readonly DateTime clipStart = DateTime.Now.AddMonths(-1);
+  readonly DateTime clipEnd = DateTime.Now.AddMonths(12);
+
+  protected override void OnLoad(EventArgs e)
+  {
+    base.OnLoad(e);
+    vivendi.Selecting += vivendi_Selecting;
+  }
+
+  void vivendi_Selecting(object sender, SqlDataSourceSelectingEventArgs e)
+  {
+    e.Command.Parameters["@CLIPSTART"].Value = clipStart;
+    e.Command.Parameters["@CLIPEND"].Value = clipEnd;
+    var userName = HttpContext.Current.User.Identity.Name;
+    e.Command.Parameters["@USERNAME"].Value = userName.Substring(userName.IndexOf('\\') + 1);
+  }
+
+  string Escape(object s)
+  {
+    return Regex.Replace(Regex.Replace(s.ToString(), @"([\\;,])", @"\$1"), @"\r?\n", @"\n");
+  }
+
+  string AsUTC(object dt)
+  {
+    return ((DateTime)dt).ToUniversalTime().ToString(@"yyyyMMdd'T'HHmmss'Z'");
+  }
+
+  string FormatDT(object dataItem, string dtName)
+  {
+    return ((DateTime)DataBinder.Eval(dataItem, dtName)).ToString((byte)DataBinder.Eval(dataItem, "VALUE") == 1 ? @"yyyyMMdd" : @"yyyyMMdd'T'HHmmss");
+  }
+
+  string FormatP(object dataItem, string pName)
+  {
+    int p = (int)DataBinder.Eval(dataItem, pName);
+    return (byte)DataBinder.Eval(dataItem, "VALUE") == 1 ? ((p + 1) / 1440).ToString(@"'P'0'D'") : p.ToString(@"'PT'0'M'");
+  }
+
+  enum FREQ
+  {
+    DAILY = 1,
+    WEEKLY = 2,
+    MONTHLY = 4,
+    YEARLY = 6,
+  }
+
+  [Flags]
+  enum BYDAY
+  {
+    MO = 0x1,
+    TU = 0x2,
+    WE = 0x4,
+    TH = 0x8,
+    FR = 0x10,
+    SA = 0x20,
+    SU = 0x40,
+  }
+
+  string BuildRRULE(object dataItem)
+  {
+    var periode = (int)DataBinder.Eval(dataItem, "FREQ");
+    var serienEnde = (int)DataBinder.Eval(dataItem, "COUNT");
+    var alleXPerioden = (int)DataBinder.Eval(dataItem, "INTERVAL");
+    var wochentage = (int)DataBinder.Eval(dataItem, "BYDAY");
+    var serieTag = (byte)DataBinder.Eval(dataItem, "BYMONTHDAY");
+    var serieMonat = (byte)DataBinder.Eval(dataItem, "BYMONTH");
+    if (periode == 1 && wochentage > 0)
+    {
+      periode = 2; // fix for Arbeitstage period
+    }
+    var periodeName = Enum.GetName(typeof(FREQ), periode);
+    if (periodeName == null)
+    {
+      return string.Empty;
+    }
+    var rrule = new StringBuilder("RRULE:FREQ=").Append(periodeName);
+    switch (serienEnde)
+    {
+      case -1: { rrule.Append(";UNTIL=").Append(FormatDT(dataItem, "UNTIL")); break; }
+      case  0: { break; }
+      default: { rrule.Append(";COUNT=").Append(serienEnde); break; }
+    }
+    if (alleXPerioden > 1)
+    {
+      rrule.Append(";INTERVAL=").Append(alleXPerioden);
+    }
+    if (serieMonat > 0)
+    {
+      rrule.Append(";BYMONTH=").Append(serieMonat);
+    }
+    if (wochentage > 0)
+    {
+      rrule.Append(";BYDAY=").Append(string.Join(",", ((BYDAY[])Enum.GetValues(typeof(BYDAY))).Where(v => ((BYDAY)wochentage & v) != 0)));
+      if (serieTag > 0)
+      {
+        rrule.Append(";BYSETPOS=").Append(serieTag == 5 ? -1 : serieTag);
+      }
+    }
+    else
+    {
+      if (serieTag > 0)
+      {
+        rrule.Append(";BYMONTHDAY=").Append(serieTag);
+      }
+    }
+    return rrule.ToString();
+  }
+</script>
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:Manuel's uber-awesome Vivendi Kliententermine-Bridge
+METHOD:PUBLISH
+X-WR-RELCALID:{C17D5DF3-D304-4a3b-8CBA-084AA9BA06AE}
+X-WR-CALNAME:Kliententermine
+X-PUBLISHED-TTL:PT1H
+X-CLIPSTART:<%=AsUTC(clipStart)%>
+X-CLIPEND:<%=AsUTC(clipEnd)%>
+<asp:SqlDataSource
+  ID="vivendi"
+  runat="server"
+  ConnectionString="<%$ConnectionStrings:vivendi%>"
+  ProviderName="<%$ConnectionStrings:vivendi.ProviderName%>"
+  SelectCommand=
+"
+SELECT
+  NA.Z_NA AS [UID],
+  NA.ErstelltAm AS [CREATED],
+  NA.GeaendertAm AS [LAST-MODIFIED],
+  NA.Betreff AS [SUMMARY],
+  NA.Inhalt AS [DESCRIPTION],
+  NA.Ort AS [LOCATION],
+  CASE NA.SensPrio
+    WHEN 0 THEN 1
+    WHEN 2 THEN 2
+    WHEN 4 THEN 0
+  END AS [X-MICROSOFT-CDO-IMPORTANCE],
+  CASE NA.SensPrio
+    WHEN 0 THEN 5
+    WHEN 2 THEN 1
+    WHEN 4 THEN 9
+  END AS [PRIORITY],
+  CASE NA.iAnzeige
+    WHEN 0 THEN 'FREE'
+    WHEN 1 THEN 'TENTATIVE'
+    WHEN 2 THEN 'BUSY'
+    WHEN 3 THEN 'OOF'
+  END AS [X-MICROSOFT-CDO-BUSYSTATUS],
+  NA.ErinnerungMinuten AS [TRIGGER],
+  (
+    SELECT
+      STRING_AGG(PE.Vorname + ' ' + PE.Name, ', ')
+    FROM
+      NACHRICHT_VIVENDI AS NAV,
+      PERSONEN AS PE,
+      PFLEGEBED AS PF
+    WHERE
+      NAV.iNachricht = NA.Z_NA
+      AND NAV.iPflegebed = PF.Z_PF
+      AND PF.iName = PE.Z_PE
+  ) AS [ORGANIZER],
+  NA.Periode AS [FREQ],
+  NA.SerienEnde AS [COUNT],
+  NA.AlleXPerioden AS [INTERVAL],
+  NA.Wochentage AS [BYDAY],
+  NA.SerieTag AS [BYMONTHDAY],
+  NA.SerieMonat AS [BYMONTH],
+  NA.Beginn AS [DTSTART],
+  NA.Ende AS [UNTIL],
+  NA.Dauer AS [DURATION],
+  NA.bGanztags AS [VALUE]
+FROM
+  NACHRICHT AS NA
+WHERE
+  NA.iOrdner IN
+  (
+    SELECT
+      NO.Z_NO
+    FROM
+      BENUTZER AS BN,
+      GRUPPENZUORDNUNG AS GZ,
+      BERECHTIGUNGEN AS BE,
+      NACHRICHT_ORDNER AS NO
+    WHERE
+      BN.Benutzer = @USERNAME                                       -- match the samAccountName
+      AND BN.Inaktiv = 0                                            -- ensure the user is active
+      AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= GETDATE())         -- ensure the user is already valid
+      AND (BN.BisDatum IS NULL OR BN.BisDatum >= GETDATE())         -- ensure the user is still valid
+      AND GZ.iBenutzer = BN.Z_BN                                    -- query assigned roles
+      AND GZ.iGruppe = BE.iGruppe                                   -- query the permissions of those roles
+      AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= GETDATE()) -- ensure the role assignment is already in effect
+      AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= GETDATE()) -- ensure the role assignment is still in effect
+      AND BE.Vorgang = 292                                          -- check the 'Termine (öffentlich)' procedure
+      AND BE.Auflisten = 1                                          -- ensure read permission
+      AND NO.OwnerTyp = 1                                           -- ensure the folder is a department folder
+      AND NO.NachrichtenTyp = 1                                     -- ensure the folder contains events
+      AND NO.OrdnerTyp = 4                                          -- ensure the folder is for clients
+      AND (NO.Von IS NULL OR NO.Von <= GETDATE())                   -- ensure the folder is already valid
+      AND (NO.Bis IS NULL OR NO.Bis >= GETDATE())                   -- ensure the folder is still valid
+      AND GZ.iMandant IN (SELECT TRIM(value) FROM STRING_SPLIT(NO.Owner, ','))
+  )
+  AND NA.Beginn <= @CLIPEND
+  AND (NA.Periode > 0 AND NA.SerienEnde = 0 OR NA.Ende >= @CLIPSTART)
+"
+>
+  <SelectParameters>
+    <asp:Parameter Name="CLIPSTART" Type="DateTime" />
+    <asp:Parameter Name="CLIPEND" Type="DateTime" />
+    <asp:Parameter Name="USERNAME" Type="String" />
+  </SelectParameters>
+</asp:SqlDataSource>
+<asp:Repeater runat="server" DataSourceID="vivendi">
+<ItemTemplate>
+BEGIN:VEVENT
+UID:<%#Eval("UID")%>
+DTSTAMP:<%#AsUTC(DateTime.Now)%>
+CREATED:<%#AsUTC(Eval("CREATED"))%>
+LAST-MODIFIED:<%#AsUTC(Eval("LAST-MODIFIED"))%>
+SUMMARY:<%#Escape(Eval("SUMMARY"))%>
+DESCRIPTION:<%#Escape(Eval("DESCRIPTION"))%>
+LOCATION:<%#Escape(Eval("LOCATION"))%>
+X-MICROSOFT-CDO-IMPORTANCE:<%#Eval("X-MICROSOFT-CDO-IMPORTANCE")%>
+PRIORITY:<%#Eval("PRIORITY")%>
+X-MICROSOFT-CDO-BUSYSTATUS:<%#Eval("X-MICROSOFT-CDO-BUSYSTATUS")%>
+<asp:PlaceHolder runat="server" Visible="<%#Eval(&quot;TRIGGER&quot;)!=DBNull.Value%>">
+BEGIN:VALARM
+TRIGGER:-PT<%#Eval("TRIGGER")%>M
+ACTION:DISPLAY
+DESCRIPTION:<%#Escape(Eval("SUMMARY"))%>
+END:VALARM
+</asp:PlaceHolder>
+<asp:PlaceHolder runat="server" Visible="<%#Eval(&quot;ORGANIZER&quot;)!=DBNull.Value%>">
+ORGANIZER;CN="<%#Eval("ORGANIZER").ToString().Replace("\"",string.Empty)%>":mailto:vivendi@calendars.local
+</asp:PlaceHolder>
+DTSTART;VALUE=<%#((byte)Eval("VALUE")== 1?"DATE":"DATE-TIME")%>:<%#FormatDT(Container.DataItem,"DTSTART")%>
+DURATION:<%#FormatP(Container.DataItem,"DURATION")%>
+<%#BuildRRULE(Container.DataItem)%>
+CLASS:PUBLIC
+TRANSP:TRANSPARENT
+END:VEVENT
+</ItemTemplate>
+</asp:Repeater>
+END:VCALENDAR
