@@ -67,6 +67,7 @@ X-PUBLISHED-TTL:PT1D
   ProviderName="<%$ConnectionStrings:vivendi.ProviderName%>"
   SelectCommand=
 "
+DECLARE @Today date = GETDATE();
 WITH PA(ID, Parent) AS
 (
   SELECT Z_MA, Z_Parent_MA
@@ -89,27 +90,27 @@ FROM
   PFLEGEBED AS PF,
   PERSONEN AS PE
 WHERE
-  BN.Benutzer = @USERNAME                                       -- match the samAccountName
-  AND BN.Inaktiv = 0                                            -- ensure the user is active
-  AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= GETDATE())         -- ensure the user is already valid
-  AND (BN.BisDatum IS NULL OR BN.BisDatum >= GETDATE())         -- ensure the user is still valid
-  AND GZ.iBenutzer = BN.Z_BN                                    -- query assigned roles
-  AND GZ.iGruppe = BE.iGruppe                                   -- query the permissions of those roles
-  AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= GETDATE()) -- ensure the role assignment is already in effect
-  AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= GETDATE()) -- ensure the role assignment is still in effect
-  AND BE.Vorgang = 80                                           -- check the 'Klientendaten' procedure
-  AND BE.Auflisten = 1                                          -- ensure read permission
-  AND                                                           -- check that the client is assigned to the granted department
+  BN.Benutzer = @USERNAME                                    -- match the samAccountName
+  AND BN.Inaktiv = 0                                         -- ensure the user is active
+  AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= @Today)         -- ensure the user is already valid
+  AND (BN.BisDatum IS NULL OR BN.BisDatum >= @Today)         -- ensure the user is still valid
+  AND GZ.iBenutzer = BN.Z_BN                                 -- query assigned roles
+  AND GZ.iGruppe = BE.iGruppe                                -- query the permissions of those roles
+  AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= @Today) -- ensure the role assignment is already in effect
+  AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= @Today) -- ensure the role assignment is still in effect
+  AND BE.Vorgang = 80                                        -- check the 'Klientendaten' procedure
+  AND BE.Auflisten = 1                                       -- ensure read permission
+  AND                                                        -- check that the client is assigned to the granted department
   (
     GZ.iMandant IS NULL
     OR GZ.iMandant = MZ.iMandant
     OR GZ.iMandant IN (SELECT PA.Parent FROM PA WHERE PA.ID = MZ.iMandant)
   )
-  AND (MZ.AbDatum IS NULL OR MZ.AbDatum <= GETDATE())           -- ensure the assigment is already valid
-  AND (MZ.BisDatum IS NULL OR MZ.BisDatum >= GETDATE())         -- ensure the assignment is still valid
-  AND MZ.iMandant = MA.Z_MA                                     -- query the assigned department data
-  AND MZ.iPflegebed = PF.Z_PF                                   -- query the assigned client meta data
-  AND PF.iName = PE.Z_PE                                        -- query the person data of the client
+  AND (MZ.AbDatum IS NULL OR MZ.AbDatum <= @Today)           -- ensure the assigment is already valid
+  AND (MZ.BisDatum IS NULL OR MZ.BisDatum >= @Today)         -- ensure the assignment is still valid
+  AND MZ.iMandant = MA.Z_MA                                  -- query the assigned department data
+  AND MZ.iPflegebed = PF.Z_PF                                -- query the assigned client meta data
+  AND PF.iName = PE.Z_PE                                     -- query the person data of the client
 GROUP BY
   PE.Z_PE, PE.Vorname, PE.Name, PE.Geburtsdatum
 "
@@ -155,7 +156,7 @@ WHERE
   P.LPEINDAT IS NOT NULL AND
   (
     P.LPAUSDAT IS NULL OR
-    P.LPAUSDAT >= GETDATE() OR
+    P.LPAUSDAT >= CONVERT(date, GETDATE()) OR
     (
       SELECT IO.LPGRUND
       FROM dbo.LGPEINAUS AS IO

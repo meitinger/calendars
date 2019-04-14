@@ -80,6 +80,7 @@ X-CLIPEND:<%=AsUTC(clipEnd)%>
   ProviderName="<%$ConnectionStrings:vivendi.ProviderName%>"
   SelectCommand=
 "
+DECLARE @Today date = GETDATE();
 WITH PA(ID, Parent) AS
 (
   SELECT Z_MA, Z_Parent_MA
@@ -116,29 +117,29 @@ WHERE
       PFLEGEBED AS PF,
       PERSONEN AS PE
     WHERE
-      BN.Benutzer = @USERNAME                                       -- match the samAccountName
-      AND BN.Inaktiv = 0                                            -- ensure the user is active
-      AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= GETDATE())         -- ensure the user is already valid
-      AND (BN.BisDatum IS NULL OR BN.BisDatum >= GETDATE())         -- ensure the user is still valid
-      AND GZ.iBenutzer = BN.Z_BN                                    -- query assigned roles
-      AND GZ.iGruppe = BE.iGruppe                                   -- query the permissions of those roles
-      AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= GETDATE()) -- ensure the role assignment is already in effect
-      AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= GETDATE()) -- ensure the role assignment is still in effect
-      AND BE.Vorgang = 279                                          -- check the 'Statusübersicht' procedure
-      AND BE.Dialog = 1                                             -- ensure start permission
-      AND                                                           -- check that the client is assigned to the granted department
+      BN.Benutzer = @USERNAME                                    -- match the samAccountName
+      AND BN.Inaktiv = 0                                         -- ensure the user is active
+      AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= @Today)         -- ensure the user is already valid
+      AND (BN.BisDatum IS NULL OR BN.BisDatum >= @Today)         -- ensure the user is still valid
+      AND GZ.iBenutzer = BN.Z_BN                                 -- query assigned roles
+      AND GZ.iGruppe = BE.iGruppe                                -- query the permissions of those roles
+      AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= @Today) -- ensure the role assignment is already in effect
+      AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= @Today) -- ensure the role assignment is still in effect
+      AND BE.Vorgang = 279                                       -- check the 'Statusübersicht' procedure
+      AND BE.Dialog = 1                                          -- ensure start permission
+      AND                                                        -- check that the client is assigned to the granted department
       (
         GZ.iMandant IS NULL
         OR GZ.iMandant = MZ.iMandant
         OR GZ.iMandant IN (SELECT PA.Parent FROM PA WHERE PA.ID = MZ.iMandant)
       )
-      AND (MZ.AbDatum IS NULL OR MZ.AbDatum <= GETDATE())           -- ensure the assigment is already valid
-      AND (MZ.BisDatum IS NULL OR MZ.BisDatum >= GETDATE())         -- ensure the assignment is still valid
+      AND (MZ.AbDatum IS NULL OR MZ.AbDatum <= @Today)           -- ensure the assigment is already valid
+      AND (MZ.BisDatum IS NULL OR MZ.BisDatum >= @Today)         -- ensure the assignment is still valid
   )
-  AND (PS.AbDatum IS NULL OR PS.AbDatum <= @CLIPEND)                -- ensure the status is already within range
-  AND (PS.BisDatum IS NULL OR PS.BisDatum >= @CLIPSTART)            -- ensure the status is still within range
-  AND PS.iPflegebed = PF.Z_PF                                       -- query the assigned client meta data
-  AND PF.iName = PE.Z_PE                                            -- query the person data of the client
+  AND (PS.AbDatum IS NULL OR PS.AbDatum <= @CLIPEND)             -- ensure the status is already within range
+  AND (PS.BisDatum IS NULL OR PS.BisDatum >= @CLIPSTART)         -- ensure the status is still within range
+  AND PS.iPflegebed = PF.Z_PF                                    -- query the assigned client meta data
+  AND PF.iName = PE.Z_PE                                         -- query the person data of the client
 "
 >
   <SelectParameters>

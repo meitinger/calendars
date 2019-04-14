@@ -140,6 +140,7 @@ X-CLIPEND:<%=AsUTC(clipEnd)%>
   ProviderName="<%$ConnectionStrings:vivendi.ProviderName%>"
   SelectCommand=
 "
+DECLARE @Today date = GETDATE();
 SELECT
   NA.Z_NA AS [UID],
   NA.ErstelltAm AS [CREATED],
@@ -199,21 +200,21 @@ WHERE
       BERECHTIGUNGEN AS BE,
       NACHRICHT_ORDNER AS NO
     WHERE
-      BN.Benutzer = @USERNAME                                       -- match the samAccountName
-      AND BN.Inaktiv = 0                                            -- ensure the user is active
-      AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= GETDATE())         -- ensure the user is already valid
-      AND (BN.BisDatum IS NULL OR BN.BisDatum >= GETDATE())         -- ensure the user is still valid
-      AND GZ.iBenutzer = BN.Z_BN                                    -- query assigned roles
-      AND GZ.iGruppe = BE.iGruppe                                   -- query the permissions of those roles
-      AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= GETDATE()) -- ensure the role assignment is already in effect
-      AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= GETDATE()) -- ensure the role assignment is still in effect
-      AND BE.Vorgang = 292                                          -- check the 'Termine (öffentlich)' procedure
-      AND BE.Auflisten = 1                                          -- ensure read permission
-      AND NO.OwnerTyp = 1                                           -- ensure the folder is a department folder
-      AND NO.NachrichtenTyp = 1                                     -- ensure the folder contains events
-      AND NO.OrdnerTyp = 4                                          -- ensure the folder is for clients
-      AND (NO.Von IS NULL OR NO.Von <= GETDATE())                   -- ensure the folder is already valid
-      AND (NO.Bis IS NULL OR NO.Bis >= GETDATE())                   -- ensure the folder is still valid
+      BN.Benutzer = @USERNAME                                    -- match the samAccountName
+      AND BN.Inaktiv = 0                                         -- ensure the user is active
+      AND (BN.AbDatum  IS NULL OR BN.AbDatum  <= @Today)         -- ensure the user is already valid
+      AND (BN.BisDatum IS NULL OR BN.BisDatum >= @Today)         -- ensure the user is still valid
+      AND GZ.iBenutzer = BN.Z_BN                                 -- query assigned roles
+      AND GZ.iGruppe = BE.iGruppe                                -- query the permissions of those roles
+      AND (GZ.dtGueltigAb  IS NULL OR GZ.dtGueltigAb  <= @Today) -- ensure the role assignment is already in effect
+      AND (GZ.dtGueltigBis IS NULL OR GZ.dtGueltigBis >= @Today) -- ensure the role assignment is still in effect
+      AND BE.Vorgang = 292                                       -- check the 'Termine (öffentlich)' procedure
+      AND BE.Auflisten = 1                                       -- ensure read permission
+      AND NO.OwnerTyp = 1                                        -- ensure the folder is a department folder
+      AND NO.NachrichtenTyp = 1                                  -- ensure the folder contains events
+      AND NO.OrdnerTyp = 4                                       -- ensure the folder is for clients
+      AND (NO.Von IS NULL OR NO.Von <= @Today)                   -- ensure the folder is already valid
+      AND (NO.Bis IS NULL OR NO.Bis >= @Today)                   -- ensure the folder is still valid
       AND GZ.iMandant IN (SELECT TRIM(value) FROM STRING_SPLIT(NO.Owner, ','))
   )
   AND NA.Beginn <= @CLIPEND
