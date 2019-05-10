@@ -111,6 +111,7 @@ WHERE
   AND MZ.iMandant = MA.Z_MA                                  -- query the assigned department data
   AND MZ.iPflegebed = PF.Z_PF                                -- query the assigned client meta data
   AND PF.iName = PE.Z_PE                                     -- query the person data of the client
+  AND PE.Geburtsdatum IS NOT NULL                            -- query only clients with set birthdays
 GROUP BY
   PE.Z_PE, PE.Vorname, PE.Name, PE.Geburtsdatum
 "
@@ -147,8 +148,7 @@ SELECT
   dbo.MacRoman2Unicode(P.LPNAMVORN) AS [SUMMARY],
   dbo.MacRoman2Unicode(P.LPDIORT) AS [LOCATION],
   dbo.MacRoman2Unicode(P.LPBERUF) AS [DESCRIPTION],
-  P.LPGEBDAT AS [DATE],
-  P.LPSTKOST AS [ROLE]
+  P.LPGEBDAT AS [DATE]
 FROM
   dbo.LGPER AS P
 WHERE
@@ -173,7 +173,8 @@ WHERE
     (@GRUPPE & 0x040 <> 0 AND P.LPSTKOST = '080100') OR
     (@GRUPPE & 0x080 <> 0 AND P.LPSTKOST = '080200') OR
     (@GRUPPE & 0x100 <> 0 AND P.LPSTKOST LIKE '[0-9][0-9][0-9]9[0-9][0-9]')
-  )
+  ) AND
+  P.LPGEBDAT IS NOT NULL
 "
 >
   <SelectParameters>
