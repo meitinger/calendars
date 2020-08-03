@@ -40,7 +40,7 @@
 
   string AsUTC(object dt)
   {
-    return ((DateTime)dt).ToUniversalTime().ToString(@"yyyyMMdd'T'HHmmss'Z'");
+    return dt == DBNull.Value ? string.Empty : ((DateTime)dt).ToUniversalTime().ToString(@"yyyyMMdd'T'HHmmss'Z'");
   }
 
   string FormatDT(object dataItem, string dtName)
