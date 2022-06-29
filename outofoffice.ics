@@ -16,19 +16,6 @@
    * along with this program.  If not, see <http://www.gnu.org/licenses/>.
    */
 
-  static readonly Dictionary<string,int> GroupMappings = new Dictionary<string,int>()
-  {
-    {"000400", 0x100},
-    {"010400", 0x001},
-    {"020400", 0x002},
-    {"030400", 0x004},
-    {"040400", 0x008},
-    {"050400", 0x010},
-    {"070400", 0x020},
-    {"080100", 0x040},
-    {"080200", 0x080},
-  };
-
   readonly DateTime clipStart = DateTime.Now.AddMonths(-1);
   readonly DateTime clipEnd = DateTime.Now.AddMonths(12);
 
@@ -36,7 +23,6 @@
   {
     base.OnLoad(e);
     vivendi.Selecting += vivendi_Selecting;
-    consens.Selecting += consens_Selecting;
   }
 
   void vivendi_Selecting(object sender, SqlDataSourceSelectingEventArgs e)
@@ -45,13 +31,6 @@
     e.Command.Parameters["@CLIPEND"].Value = clipEnd;
     var userName = HttpContext.Current.User.Identity.Name;
     e.Command.Parameters["@USERNAME"].Value = userName.Substring(userName.IndexOf('\\') + 1);
-  }
-
-  void consens_Selecting(object sender, SqlDataSourceSelectingEventArgs e)
-  {
-    e.Command.Parameters["@CLIPSTART"].Value = clipStart;
-    e.Command.Parameters["@CLIPEND"].Value = clipEnd;
-    e.Command.Parameters["@GROUPS"].Value = GroupMappings.Aggregate(0, (mask, entry) => HttpContext.Current.User.IsInRole(@"AUFBAUWERK\"+entry.Key) ? (mask | entry.Value) : mask);
   }
 
   string Escape(object s)
@@ -66,7 +45,7 @@
 </script>
 BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:Manuel's uber-awesome Vivendi and consens OoO-Bridge
+PRODID:Manuel's uber-awesome Vivendi OoO-Bridge
 METHOD:PUBLISH
 X-WR-RELCALID:{3E4B89F4-7561-46b1-938F-9BAC1300791D}
 X-WR-CALNAME:Abwesenheiten
@@ -164,90 +143,6 @@ DTEND;VALUE=DATE:<%#Eval("DTEND")==DBNull.Value?"45000901":((DateTime)Eval("DTEN
 </asp:PlaceHolder>
 TRANSP:TRANSPARENT
 X-MICROSOFT-CDO-BUSYSTATUS:OOF
-END:VEVENT
-</ItemTemplate>
-</asp:Repeater>
-<asp:SqlDataSource
-  ID="consens"
-  runat="server"
-  ConnectionString="<%$ConnectionStrings:consens%>"
-  ProviderName="<%$ConnectionStrings:consens.ProviderName%>"
-  SelectCommand=
-"
-SELECT
-  U.ID AS [UID],
-  U.BEGINN AS [DTSTART],
-  U.ENDE AS [DTEND],
-  M.MA_NAME AS [SUMMARY],
-  U.ABWESENHEIT AS [LOCATION],
-  U.STATUS AS [BUSYSTATUS]
-FROM (
-  SELECT
-    A.AUS_NR * 2 + 1 AS ID,
-    A.AUS_DATUM AS BEGINN,
-    A.AUS_DATUM AS ENDE,
-    T.SP_NAME AS ABWESENHEIT,
-    'OOF' AS STATUS,
-    A.AUS_MA_NR AS MA_NR
-  FROM
-    AUSGABE AS A
-    JOIN MA_STORE AS T ON A.AUS_ABW = T.SP_NR
-  WHERE
-    A.AUS_DATUM BETWEEN @CLIPSTART AND @CLIPEND AND
-    A.AUS_ABW_TYPE = 1 AND T.SP_TYPE = 2 AND
-    T.SP_NR NOT IN (10,11)
-UNION
-  SELECT
-    D.UID * 2 AS ID,
-    S.AVALUE AS BEGINN,
-    E.AVALUE AS ENDE,
-    T.AVALUE AS ABWESENHEIT,
-    'TENTATIVE' AS STATUS,
-    D.MA_NR AS MA_NR
-  FROM
-    DUTIES AS D
-    JOIN DATEPARAMS AS S ON D.UID = S.DUTYUID AND S.PARAMUID = 29
-    JOIN DATEPARAMS AS E ON D.UID = E.DUTYUID AND E.PARAMUID = 30
-    JOIN VARCHARPARAMS AS T ON D.UID = T.DUTYUID AND T.PARAMUID = 33
-  WHERE
-    D.CMD = 19 AND D.STATUS = 'L' AND
-    E.AVALUE >= @CLIPSTART AND S.AVALUE <= @CLIPEND
-) AS U
-  JOIN MA_DATEN AS M ON U.MA_NR = M.MA_NR
-  JOIN FIL AS F ON M.MA_FIL = F.FIL_NR
-  JOIN KST AS K ON M.MA_KST = K.KST_NR
-WHERE (
-  @GROUPS & 0x001 <> 0 AND F.FIL_KURZ = '010' OR
-  @GROUPS & 0x002 <> 0 AND F.FIL_KURZ = '020' OR
-  @GROUPS & 0x004 <> 0 AND F.FIL_KURZ = '030' OR
-  @GROUPS & 0x008 <> 0 AND (F.FIL_KURZ = '040' OR F.FIL_KURZ = '060') OR
-  @GROUPS & 0x010 <> 0 AND F.FIL_KURZ = '050' OR
-  @GROUPS & 0x020 <> 0 AND F.FIL_KURZ = '070' OR
-  @GROUPS & 0x040 <> 0 AND F.FIL_KURZ = '080' AND K.KST_KURZ = '100' OR
-  @GROUPS & 0x080 <> 0 AND F.FIL_KURZ = '080' AND K.KST_KURZ = '200' OR
-  @GROUPS & 0x100 <> 0 AND F.FIL_KURZ = '000'
-)
-"
->
-  <SelectParameters>
-    <asp:Parameter Name="CLIPSTART" Type="DateTime" />
-    <asp:Parameter Name="CLIPEND" Type="DateTime" />
-    <asp:Parameter Name="GROUPS" Type="Int32" />
-  </SelectParameters>
-</asp:SqlDataSource>
-<asp:Repeater runat="server" DataSourceID="consens">
-<ItemTemplate>
-BEGIN:VEVENT
-UID:CONSENS<%#Eval("UID")%>
-DTSTAMP:<%#AsUTC(DateTime.Now)%>
-SUMMARY:<%#Escape(Eval("SUMMARY"))%>
-LOCATION:<%#Escape(Eval("LOCATION"))%>
-CATEGORIES:Mitarbeiter_in
-CLASS:PUBLIC
-DTSTART;VALUE=DATE:<%#((DateTime)Eval("DTSTART")).ToString("yyyyMMdd")%>
-DTEND;VALUE=DATE:<%#((DateTime)Eval("DTEND")).AddTicks(TimeSpan.TicksPerDay).ToString("yyyyMMdd")%>
-TRANSP:TRANSPARENT
-X-MICROSOFT-CDO-BUSYSTATUS:<%#Eval("BUSYSTATUS")%>
 END:VEVENT
 </ItemTemplate>
 </asp:Repeater>

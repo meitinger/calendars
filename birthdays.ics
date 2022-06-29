@@ -18,16 +18,13 @@
 
   static readonly Dictionary<string,int> GroupMappings = new Dictionary<string,int>()
   {
-    {"000910", 0xFFF},
-    {"010400", 0x001},
-    {"020400", 0x002},
-    {"030400", 0x004},
-    {"040400", 0x008},
-    {"050400", 0x010},
-    {"070400", 0x020},
-    {"080100", 0x040},
-    {"080200", 0x080},
-    {"000999", 0x100},
+    {"000910", 0xFF},
+    {"020999", 0x01},
+    {"030999", 0x02},
+    {"040999", 0x04},
+    {"050999", 0x08},
+    {"070999", 0x10},
+    {"000999", 0x40},
   };
 
   protected override void OnLoad(EventArgs e)
@@ -145,9 +142,9 @@ END:VEVENT
 "
 SELECT
   P.LPSEQ AS [UID],
-  dbo.MacRoman2Unicode(P.LPNAMVORN) AS [SUMMARY],
-  dbo.MacRoman2Unicode(P.LPDIORT) AS [LOCATION],
-  dbo.MacRoman2Unicode(P.LPBERUF) AS [DESCRIPTION],
+  P.LPNAMVORN AS [SUMMARY],
+  P.LPDIORT AS [LOCATION],
+  P.LPBERUF AS [DESCRIPTION],
   P.LPGEBDAT AS [DATE]
 FROM
   dbo.LGPER AS P
@@ -164,15 +161,13 @@ WHERE
     ) IN (7,8,9,10,11,12,15,23,29,100,200,250)
   ) AND
   (
-    (@GRUPPE & 0x001 <> 0 AND P.LPSTKOST LIKE '010[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x002 <> 0 AND P.LPSTKOST LIKE '020[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x004 <> 0 AND P.LPSTKOST LIKE '030[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x008 <> 0 AND P.LPSTKOST LIKE '0[46]0[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x010 <> 0 AND P.LPSTKOST LIKE '050[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x020 <> 0 AND P.LPSTKOST LIKE '070[0-9][0-9][0-9]') OR
-    (@GRUPPE & 0x040 <> 0 AND P.LPSTKOST = '080100') OR
-    (@GRUPPE & 0x080 <> 0 AND P.LPSTKOST = '080200') OR
-    (@GRUPPE & 0x100 <> 0 AND P.LPSTKOST LIKE '[0-9][0-9][0-9]9[0-9][0-9]')
+    (@GRUPPE & 0x01 <> 0 AND P.LPSTKOST LIKE '0[12]0[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x02 <> 0 AND P.LPSTKOST LIKE '030[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x04 <> 0 AND P.LPSTKOST LIKE '0[46]0[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x08 <> 0 AND P.LPSTKOST LIKE '050[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x10 <> 0 AND P.LPSTKOST LIKE '070[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x20 <> 0 AND P.LPSTKOST LIKE '080[0-9][0-9][0-9]') OR
+    (@GRUPPE & 0x40 <> 0 AND P.LPSTKOST LIKE '0[0-7]09[0-9][0-9]')
   ) AND
   P.LPGEBDAT IS NOT NULL
 "

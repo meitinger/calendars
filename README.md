@@ -2,8 +2,9 @@ Internet Calendar Synchronization
 =================================
 
 This is mostly an internal repository, or at least it is only useful for users
-of *Vivendi*, *cpulohn* and *Consens*. What the code does is export various
-calendar entries from the aforementioned programs as iCalendar files.  
+of *Vivendi* and *cpulohn*. What the code does is export various calendar
+entries from the aforementioned programs as iCalendar files.
+
 The following calendars are available:
 
 * `birthdays.ics`: Contains birthdays of employees (retrieved from *cpulohn*)
@@ -11,8 +12,7 @@ The following calendars are available:
                    persmission to know.
 * `clients.ics`: Gathers all client appointments stored in client calendars in
                  *Vivendi* that the user is allowed to read.
-* `outofoffice.ics`: Collects all days when clients and employees are absent
-                     from *Vivendi* and *Consens* respectively.
+* `outofoffice.ics`: Collects all days when clients are absent from *Vivendi*.
 
 
 Setup
@@ -27,6 +27,5 @@ with the SQL server names, then rename the file to `web.config`.
 Adjustments
 -----------
 Single-sign-on with *Vivendi* works by matching the NetBIOS user name with the
-user name of *Vivendi*, the permissions in *cpulohn* and *Consens* are
-calculated by the groups the user belongs to. The latter most certainly will
-need some change of code.  
+user name of *Vivendi*. Permissions in *cpulohn* are inferred from the groups
+the user belongs to. (The latter most certainly will need some code change.)
